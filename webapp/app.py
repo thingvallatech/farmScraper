@@ -17,10 +17,18 @@ import re
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
 
-# Initialize database connection
-db.connect()
-
 logger = logging.getLogger(__name__)
+
+# Lazy database connection - only connect when needed
+def get_db():
+    """Get database connection, connecting if not already connected"""
+    if not db._connection:
+        try:
+            db.connect()
+        except Exception as e:
+            logger.error(f"Database connection failed: {e}")
+            raise
+    return db
 
 
 def format_eligibility_text(eligibility_raw: str) -> dict:
