@@ -26,10 +26,6 @@ fi
 
 echo "✅ Digital Ocean CLI authenticated"
 
-# Update app.yaml with your GitHub repo
-read -p "Enter your GitHub username: " GITHUB_USER
-sed -i.bak "s/YOUR_GITHUB_USERNAME/$GITHUB_USER/g" .do/app.yaml
-
 # Create the app
 echo "🏗️  Creating Digital Ocean App..."
 doctl apps create .do/app.yaml
