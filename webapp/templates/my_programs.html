@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+
+{% block title %}My Programs - FSA Program Explorer{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2 style="margin-bottom: 0.5rem; color: #2c5530;">My Programs</h2>
+    <p style="color: #666; margin-bottom: 2rem;">Your selected programs with next steps and guidance</p>
+
+    {% if programs|length == 0 %}
+    <!-- Empty State -->
+    <div style="text-align: center; padding: 3rem; background: #f8f8f8; border-radius: 8px;">
+        <h3 style="color: #666; margin-bottom: 1rem;">No Programs Selected Yet</h3>
+        <p style="color: #999; margin-bottom: 2rem;">Use the "Find Programs for Your Farm" tool to discover programs and add them here.</p>
+        <a href="/finder" class="btn">Find Programs</a>
+    </div>
+    {% else %}
+    <!-- Program Count & Actions -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding: 1rem; background: #f0f7f1; border-radius: 4px;">
+        <div>
+            <strong style="color: #2c5530; font-size: 1.1rem;">{{ programs|length }} Program{{ 's' if programs|length != 1 else '' }} Selected</strong>
+            <p style="color: #666; margin-top: 0.25rem; font-size: 0.9rem;">Review next steps and prepare your applications</p>
+        </div>
+        <div>
+            <button onclick="clearAllPrograms()" class="btn btn-secondary">Clear All</button>
+        </div>
+    </div>
+
+    <!-- Programs List -->
+    {% for program in programs %}
+    <div class="card" style="margin-bottom: 2rem; border-left: 4px solid #2c5530;">
+        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+            <div style="flex: 1;">
+                <h3 style="color: #2c5530; margin-bottom: 0.5rem;">{{ program.program_name }}</h3>
+                {% if program.payment_min %}
+                <div style="color: #2c5530; font-weight: bold; margin-bottom: 0.5rem;">
+                    ${{ "${:,.0f}".format(program.payment_min) }}
+                    {% if program.payment_max and program.payment_max != program.payment_min %}
+                     - ${{ "${:,.0f}".format(program.payment_max) }}
+                    {% endif %}
+                    {% if program.payment_unit %}<span style="font-weight: normal;">({{ program.payment_unit }})</span>{% endif %}
+                </div>
+                {% endif %}
+            </div>
+            <button onclick="removeProgram({{ program.id }})" class="btn btn-secondary" style="font-size: 0.9rem;">Remove</button>
+        </div>
+
+        <!-- AI Summary -->
+        {% if program.ai_summary %}
+        <div style="background: #f0f7f1; padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem; line-height: 1.6;">
+            <p style="margin: 0; color: #333;">{{ program.ai_summary }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Next Steps Section -->
+        <div style="background: #fafafa; padding: 1.5rem; border-radius: 4px; margin-bottom: 1.5rem;">
+            <h4 style="color: #2c5530; margin-bottom: 1rem; font-size: 1.1rem;">Next Steps to Apply</h4>
+
+            <div style="display: grid; gap: 1.5rem;">
+                <!-- How to Apply -->
+                <div>
+                    <strong style="color: #2c5530; display: block; margin-bottom: 0.5rem;">1. How to Apply</strong>
+                    <p style="margin: 0 0 0.5rem 0; color: #666; line-height: 1.6;">Contact your local FSA office to begin the application process. Most programs require an in-person visit or appointment.</p>
+                    <a href="{{ program.source_url }}" target="_blank" class="btn" style="font-size: 0.9rem; display: inline-block; margin-top: 0.5rem;">View Official Program Page →</a>
+                </div>
+
+                <!-- Documents Needed -->
+                <div>
+                    <strong style="color: #2c5530; display: block; margin-bottom: 0.5rem;">2. Documents Typically Required</strong>
+                    <ul style="margin: 0; padding-left: 1.5rem; color: #666; line-height: 1.8;">
+                        <li>Farm ownership or lease documents</li>
+                        <li>Tax returns (last 3 years) and financial statements</li>
+                        <li>Farm operating plan or business plan</li>
+                        <li>Proof of U.S. citizenship or legal residency</li>
+                        <li>Conservation plan (if required by program)</li>
+                        <li>Proof of farm production or sales history</li>
+                    </ul>
+                    <p style="margin-top: 0.5rem; color: #999; font-size: 0.9rem; font-style: italic;">Note: Specific requirements vary by program. Contact your FSA office for the exact list.</p>
+                </div>
+
+                <!-- Local FSA Office -->
+                <div>
+                    <strong style="color: #2c5530; display: block; margin-bottom: 0.5rem;">3. Your Local FSA Office</strong>
+                    <div style="background: white; padding: 1rem; border-radius: 4px; border: 1px solid #ddd;">
+                        <strong style="display: block; margin-bottom: 0.5rem;">North Dakota FSA State Office</strong>
+                        <p style="margin: 0; color: #666; line-height: 1.6;">
+                            1025 28th Street South<br>
+                            Fargo, ND 58103<br>
+                            Phone: (701) 239-5224<br>
+                            <a href="https://www.fsa.usda.gov/state-offices/North-Dakota/index" target="_blank" style="color: #2c5530;">Find Your County Office →</a>
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Timeline -->
+                <div>
+                    <strong style="color: #2c5530; display: block; margin-bottom: 0.5rem;">4. Expected Timeline</strong>
+                    <ul style="margin: 0; padding-left: 1.5rem; color: #666; line-height: 1.8;">
+                        <li><strong>Application submission:</strong> Schedule appointment with local office</li>
+                        <li><strong>Initial review:</strong> 2-4 weeks for eligibility determination</li>
+                        <li><strong>Approval process:</strong> 4-8 weeks (varies by program and complexity)</li>
+                        <li><strong>Payment/disbursement:</strong> Varies by program type and timing</li>
+                    </ul>
+                    <p style="margin-top: 0.5rem; color: #999; font-size: 0.9rem; font-style: italic;">Timelines are estimates. Your FSA office can provide more accurate timeframes.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Eligibility Requirements (if available) -->
+        {% if program.eligibility_requirements and program.eligibility_requirements.requirements %}
+        <details style="margin-bottom: 1rem; padding: 1rem; background: #fafafa; border-radius: 4px; border: 1px solid #ddd;">
+            <summary style="cursor: pointer; font-weight: bold; color: #2c5530;">
+                Eligibility Requirements ({{ program.eligibility_requirements.total_requirements }} items)
+            </summary>
+            <div style="margin-top: 1rem; font-size: 0.9rem;">
+                <ul style="margin: 0; padding-left: 1.5rem; color: #666; line-height: 1.8;">
+                    {% for req in program.eligibility_requirements.requirements %}
+                    <li style="margin-bottom: 0.5rem;">
+                        {{ req.requirement }}
+                        {% if req.note %}<br><span style="font-size: 0.85rem; font-style: italic; color: #999;">{{ req.note }}</span>{% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </details>
+        {% endif %}
+
+        <!-- Payment Estimator / Loan Info -->
+        {% if program.payment_min or program.payment_max %}
+        {% set is_loan = 'loan' in program.program_name.lower() %}
+        <details {% if not is_loan %}open{% endif %} style="background: {% if is_loan %}#e3f2fd{% else %}#e8f5e9{% endif %}; padding: 1.5rem; border-radius: 4px; border: 2px solid {% if is_loan %}#2196f3{% else %}#4caf50{% endif %}; margin-top: 1.5rem;">
+            <summary style="cursor: pointer; font-weight: bold; color: {% if is_loan %}#1565c0{% else %}#2c5530{% endif %}; font-size: 1.1rem; margin-bottom: 1rem;">
+                {% if is_loan %}💵 Loan Information{% else %}💰 Payment Estimator{% endif %}
+            </summary>
+
+            {% if is_loan %}
+            <!-- Loan Information Display -->
+            <div style="padding: 1rem; background: white; border-radius: 4px; border: 2px solid #1565c0;">
+                <div style="margin-bottom: 1rem;">
+                    <strong style="color: #1565c0; font-size: 1.1rem;">Loan Limits:</strong>
+                </div>
+                <div style="font-size: 1.5rem; font-weight: bold; color: #1565c0; margin-bottom: 1rem;">
+                    {% if program.payment_min == program.payment_max %}
+                        Up to ${{ "${:,.0f}".format(program.payment_min) }}
+                    {% else %}
+                        ${{ "${:,.0f}".format(program.payment_min) }} - ${{ "${:,.0f}".format(program.payment_max) }}
+                    {% endif %}
+                </div>
+                <div style="background: #e3f2fd; padding: 1rem; border-radius: 4px; border-left: 4px solid #1565c0; margin-bottom: 1rem;">
+                    <p style="margin: 0 0 0.75rem 0; color: #1565c0; font-weight: bold;">⚠️ Important: This is a loan, not a payment</p>
+                    <ul style="margin: 0; padding-left: 1.5rem; color: #555; line-height: 1.8;">
+                        <li>These amounts represent <strong>borrowing limits</strong>, not money you receive</li>
+                        <li>You borrow only what you need, up to the maximum limit</li>
+                        <li>Loans must be <strong>repaid with interest</strong></li>
+                        <li>Interest rates and repayment terms vary by program and borrower</li>
+                        <li>Your FSA office will determine your specific loan amount based on your needs and eligibility</li>
+                    </ul>
+                </div>
+                <p style="margin: 0; font-size: 0.9rem; color: #666; font-style: italic;">
+                    Contact your local FSA office for specific interest rates, repayment terms, and to determine the loan amount that's right for your operation.
+                </p>
+            </div>
+            {% else %}
+            <!-- Payment Calculator -->
+            <div class="payment-calculator" data-program-id="{{ program.id }}">
+                <!-- Input Section -->
+                <div style="margin-bottom: 1.5rem;">
+                    {% if program.payment_unit and 'acre' in program.payment_unit.lower() %}
+                    <!-- Per Acre Calculator -->
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #2c5530;">Enter Number of Acres:</label>
+                    <input type="number"
+                           class="calc-input"
+                           data-calc-type="acres"
+                           placeholder="e.g., 500"
+                           style="width: 200px; padding: 0.75rem; border: 2px solid #4caf50; border-radius: 4px; font-size: 1rem;"
+                           oninput="calculatePayment(this, {{ program.payment_min or 0 }}, {{ program.payment_max or 0 }}, '{{ program.payment_unit }}')">
+
+                    {% elif program.payment_unit and ('bushel' in program.payment_unit.lower() or 'cwt' in program.payment_unit.lower()) %}
+                    <!-- Per Bushel/CWT Calculator -->
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #2c5530;">Enter Production Amount:</label>
+                    <input type="number"
+                           class="calc-input"
+                           data-calc-type="production"
+                           placeholder="e.g., 10000"
+                           style="width: 200px; padding: 0.75rem; border: 2px solid #4caf50; border-radius: 4px; font-size: 1rem;"
+                           oninput="calculatePayment(this, {{ program.payment_min or 0 }}, {{ program.payment_max or 0 }}, '{{ program.payment_unit }}')">
+                    <small style="display: block; margin-top: 0.25rem; color: #666;">Units: {{ program.payment_unit }}</small>
+
+                    {% elif program.payment_unit and 'head' in program.payment_unit.lower() %}
+                    <!-- Per Head Calculator -->
+                    <label style="display: block; margin-bottom: 0.5rem; font-weight: bold; color: #2c5530;">Enter Number of Animals:</label>
+                    <input type="number"
+                           class="calc-input"
+                           data-calc-type="heads"
+                           placeholder="e.g., 100"
+                           style="width: 200px; padding: 0.75rem; border: 2px solid #4caf50; border-radius: 4px; font-size: 1rem;"
+                           oninput="calculatePayment(this, {{ program.payment_min or 0 }}, {{ program.payment_max or 0 }}, '{{ program.payment_unit }}')">
+
+                    {% else %}
+                    <!-- Default/Other Units -->
+                    <div style="background: white; padding: 1rem; border-radius: 4px; border: 2px solid #4caf50;">
+                        <div style="margin-bottom: 0.5rem;">
+                            <strong style="color: #2c5530; font-size: 1.1rem;">Payment Range:</strong>
+                        </div>
+                        <div style="font-size: 1.3rem; font-weight: bold; color: #2c5530; margin-bottom: 0.75rem;">
+                            {% if program.payment_min == program.payment_max %}
+                                {{ "${:,.2f}".format(program.payment_min) }}
+                            {% else %}
+                                {{ "${:,.2f}".format(program.payment_min) }} - {{ "${:,.2f}".format(program.payment_max) }}
+                            {% endif %}
+                            {% if program.payment_unit and program.payment_unit != 'flat_rate' %}
+                                <span style="font-size: 0.9rem; font-weight: normal; color: #666;">per {{ program.payment_unit }}</span>
+                            {% else %}
+                                <span style="font-size: 0.9rem; font-weight: normal; color: #999;">(unit not specified)</span>
+                            {% endif %}
+                        </div>
+                        <div style="background: #fff3cd; padding: 0.75rem; border-radius: 4px; border-left: 3px solid #ffc107;">
+                            <p style="margin: 0; color: #856404; line-height: 1.6; font-size: 0.95rem;">
+                                <strong>⚠️ Incomplete Information:</strong> The payment unit (per acre, per bushel, per cwt, etc.) was not available in our data. This range may be:
+                            </p>
+                            <ul style="margin: 0.5rem 0 0 0; padding-left: 1.5rem; color: #856404; line-height: 1.6; font-size: 0.9rem;">
+                                <li>Per-unit rates (acre, bushel, cwt, head)</li>
+                                <li>Coverage level options you can select</li>
+                                <li>Total payment amounts per application</li>
+                                <li>Rate ranges based on different program tiers</li>
+                            </ul>
+                        </div>
+                        <p style="margin-top: 0.75rem; margin-bottom: 0; font-size: 0.9rem; color: #666; font-weight: bold;">
+                            → Contact your FSA office to get the complete payment structure including units and calculation methods for your specific farm.
+                        </p>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Result Display -->
+                <div id="calc-result-{{ program.id }}" style="display: none; padding: 1rem; background: white; border-radius: 4px; border: 2px solid #2c5530;">
+                    <div style="margin-bottom: 0.5rem;">
+                        <strong style="color: #2c5530;">Estimated Payment:</strong>
+                    </div>
+                    <div style="font-size: 1.5rem; font-weight: bold; color: #2c5530;" id="calc-amount-{{ program.id }}">
+                        <!-- Result will appear here -->
+                    </div>
+                    <div style="margin-top: 0.5rem; font-size: 0.9rem; color: #666;">
+                        <em>This is an estimate. Actual payments may vary based on program rules, funding availability, and eligibility verification.</em>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </details>
+        {% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+</div>
+
+{% block extra_js %}
+<script>
+    // On page load, check localStorage and redirect with IDs if needed
+    document.addEventListener('DOMContentLoaded', function() {
+        const programs = JSON.parse(localStorage.getItem('myPrograms') || '[]');
+        const urlParams = new URLSearchParams(window.location.search);
+        const currentIds = urlParams.get('ids');
+
+        // If we have programs in localStorage but no IDs in URL, redirect to load them
+        if (programs.length > 0 && !currentIds) {
+            const ids = programs.map(p => p.id).join(',');
+            window.location.href = `/my-programs?ids=${ids}`;
+        }
+    });
+
+    function removeProgram(programId) {
+        const programs = JSON.parse(localStorage.getItem('myPrograms') || '[]');
+        const filtered = programs.filter(p => p.id !== programId);
+        localStorage.setItem('myPrograms', JSON.stringify(filtered));
+
+        // Reload page
+        if (filtered.length > 0) {
+            const ids = filtered.map(p => p.id).join(',');
+            window.location.href = `/my-programs?ids=${ids}`;
+        } else {
+            window.location.href = '/my-programs';
+        }
+    }
+
+    function clearAllPrograms() {
+        if (confirm('Are you sure you want to remove all programs from your list?')) {
+            localStorage.removeItem('myPrograms');
+            window.location.href = '/my-programs';
+        }
+    }
+
+    function calculatePayment(input, paymentMin, paymentMax, paymentUnit) {
+        const amount = parseFloat(input.value);
+
+        // Find the program ID from the parent calculator div
+        const calculator = input.closest('.payment-calculator');
+        const programId = calculator.getAttribute('data-program-id');
+
+        const resultDiv = document.getElementById(`calc-result-${programId}`);
+        const amountDiv = document.getElementById(`calc-amount-${programId}`);
+
+        if (!amount || amount <= 0) {
+            resultDiv.style.display = 'none';
+            return;
+        }
+
+        // Calculate min and max payment
+        const estimatedMin = amount * paymentMin;
+        const estimatedMax = amount * paymentMax;
+
+        // Format the result
+        let resultText = '';
+        if (estimatedMin === estimatedMax) {
+            resultText = `$${estimatedMin.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        } else {
+            resultText = `$${estimatedMin.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})} - $${estimatedMax.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        }
+
+        // Show the result
+        amountDiv.textContent = resultText;
+        resultDiv.style.display = 'block';
+    }
+</script>
+{% endblock %}
+
+{% endblock %}

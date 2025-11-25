@@ -1,0 +1,63 @@
+# Web Scraping
+playwright==1.41.0
+beautifulsoup4==4.12.3
+lxml==5.1.0
+requests==2.31.0
+httpx==0.26.0
+
+# PDF Processing
+pdfplumber==0.10.4
+camelot-py[cv]==0.11.0
+PyPDF2==3.0.1
+tabula-py==2.9.0
+
+# OCR (optional, for difficult PDFs)
+pytesseract==0.3.10
+# Note: Requires tesseract binary: brew install tesseract (macOS)
+
+# Database
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.25
+
+# Data Analysis
+pandas==2.2.0
+numpy==1.26.3
+
+# NLP for text extraction
+spacy==3.7.2
+# Download model: python -m spacy download en_core_web_sm
+
+# Utilities
+python-dotenv==1.0.1
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Logging and monitoring
+loguru==0.7.2
+
+# Date parsing
+python-dateutil==2.8.2
+
+# Async support
+aiohttp==3.9.3
+aiofiles==23.2.1
+
+# Jupyter for analysis
+jupyter==1.0.0
+ipykernel==6.29.0
+matplotlib==3.8.2
+seaborn==0.13.2
+
+# Progress bars
+tqdm==4.66.1
+
+# Rate limiting
+ratelimit==2.2.1
+
+# Testing (optional)
+pytest==7.4.3
+pytest-asyncio==0.23.4
+
+# Development tools
+black==24.1.1
+ruff==0.2.1

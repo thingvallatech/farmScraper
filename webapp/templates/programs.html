@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Programs - FSA Program Explorer{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2 style="margin-bottom: 1rem;">Filter Programs</h2>
+    <form method="get" action="/programs">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Category</label>
+                <select name="category" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="all" {% if category == 'all' %}selected{% endif %}>All Categories</option>
+                    <option value="Loan Programs" {% if category == 'Loan Programs' %}selected{% endif %}>Loan Programs</option>
+                    <option value="Conservation" {% if category == 'Conservation' %}selected{% endif %}>Conservation</option>
+                    <option value="Disaster/Emergency" {% if category == 'Disaster/Emergency' %}selected{% endif %}>Disaster/Emergency</option>
+                </select>
+            </div>
+
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Min Confidence</label>
+                <select name="min_confidence" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="0.0" {% if min_confidence == 0.0 %}selected{% endif %}>All</option>
+                    <option value="0.5" {% if min_confidence == 0.5 %}selected{% endif %}>0.5+</option>
+                    <option value="0.7" {% if min_confidence == 0.7 %}selected{% endif %}>0.7+</option>
+                    <option value="0.9" {% if min_confidence == 0.9 %}selected{% endif %}>0.9+</option>
+                </select>
+            </div>
+
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Has Payment Info</label>
+                <select name="has_payment" style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+                    <option value="" {% if not has_payment %}selected{% endif %}>Any</option>
+                    <option value="yes" {% if has_payment == 'yes' %}selected{% endif %}>Yes</option>
+                </select>
+            </div>
+
+            <div>
+                <label style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Search</label>
+                <input type="text" name="search" value="{{ search }}" placeholder="Search programs..." style="width: 100%; padding: 0.5rem; border: 1px solid #ddd; border-radius: 4px;">
+            </div>
+        </div>
+
+        <button type="submit" class="btn">Apply Filters</button>
+        <a href="/programs" class="btn btn-secondary">Reset</a>
+    </form>
+</div>
+
+<h3 style="margin-bottom: 1rem;">{{ programs|length }} Programs Found</h3>
+
+{% for program in programs %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.75rem;">
+        <h4 style="color: #2c5530; flex: 1;">{{ program.program_name }}</h4>
+        <span class="badge {% if program.confidence_score >= 0.7 %}badge-high{% elif program.confidence_score >= 0.5 %}badge-medium{% else %}badge-low{% endif %}">
+            {{ "%.1f"|format(program.confidence_score) }}
+        </span>
+    </div>
+
+    {% if program.description_short %}
+    <p style="color: #666; margin-bottom: 1rem;">{{ program.description_short }}...</p>
+    {% endif %}
+
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">
+        {% if program.payment_min %}
+        <div>
+            <strong>Payment:</strong> ${{ "${:,.0f}".format(program.payment_min) }}
+            {% if program.payment_max and program.payment_max != program.payment_min %}
+             - ${{ "${:,.0f}".format(program.payment_max) }}
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if program.has_eligibility %}
+        <div>
+            <span class="badge badge-high">Has Eligibility Info</span>
+        </div>
+        {% endif %}
+    </div>
+
+    <div style="display: flex; gap: 1rem;">
+        <a href="/program/{{ program.id }}" class="btn">View Details</a>
+        <a href="{{ program.source_url }}" target="_blank" class="btn btn-secondary">View Source</a>
+    </div>
+</div>
+{% endfor %}
+
+{% if not programs %}
+<div class="card" style="text-align: center; padding: 3rem;">
+    <p style="color: #666;">No programs found matching your criteria.</p>
+</div>
+{% endif %}
+{% endblock %}

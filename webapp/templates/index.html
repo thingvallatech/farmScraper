@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Home - FSA Program Explorer{% endblock %}
+
+{% block content %}
+<!-- Hero Section for Farmers -->
+<div class="card" style="background: linear-gradient(135deg, #2c5530 0%, #3d7040 100%); color: white; padding: 3rem 2rem; margin-bottom: 2rem; text-align: center;">
+    <h1 style="color: white; font-size: 2.5rem; margin-bottom: 1rem;">Find Farm Programs That Match Your Needs</h1>
+    <p style="font-size: 1.2rem; margin-bottom: 2rem; color: #e8f5e9;">Answer a few simple questions to discover FSA programs designed for your farm</p>
+    <a href="/finder" class="btn" style="background: white; color: #2c5530; font-size: 1.2rem; padding: 1rem 2.5rem; display: inline-block; font-weight: bold;">Get Started →</a>
+</div>
+
+<h2 style="margin-bottom: 1.5rem;">What We Have</h2>
+
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="number">{{ stats.total_programs }}</div>
+        <div class="label">Total Programs</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="number">{{ stats.high_quality }}</div>
+        <div class="label">High Quality (0.7+)</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="number">{{ stats.with_payment_info }}</div>
+        <div class="label">With Payment Info</div>
+    </div>
+
+    <div class="stat-card">
+        <div class="number">{{ stats.with_eligibility }}</div>
+        <div class="label">With Eligibility Info</div>
+    </div>
+</div>
+
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Programs by Category</h3>
+    <div style="display: grid; gap: 0.75rem;">
+        {% for cat in categories %}
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #f9f9f9; border-radius: 4px;">
+            <span><strong>{{ cat.category }}</strong></span>
+            <span class="badge badge-medium">{{ cat.count }} programs</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="card">
+    <h3 style="margin-bottom: 1.5rem;">Popular Programs</h3>
+    <div style="display: grid; gap: 1rem;">
+        {% for program in featured_programs %}
+        <div style="padding: 1rem; border: 1px solid #e0e0e0; border-radius: 4px; transition: all 0.2s;" onmouseover="this.style.borderColor='#2c5530'; this.style.background='#fafafa'" onmouseout="this.style.borderColor='#e0e0e0'; this.style.background='white'">
+            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
+                <h4 style="color: #2c5530; margin: 0; flex: 1;"><a href="/program/{{ program.id }}" style="color: #2c5530; text-decoration: none;">{{ program.program_name }}</a></h4>
+                <span class="badge badge-high" style="margin-left: 1rem;">Quality: {{ "%.1f"|format(program.confidence_score) }}</span>
+            </div>
+            {% if program.description_short %}
+            <p style="color: #666; margin: 0.5rem 0; font-size: 0.9rem;">{{ program.description_short }}...</p>
+            {% endif %}
+            <div style="display: flex; gap: 1rem; margin-top: 0.75rem; flex-wrap: wrap;">
+                {% if program.payment_min %}
+                <span style="font-size: 0.9rem;"><strong>Payment:</strong> ${{ "${:,.0f}".format(program.payment_min) }}{% if program.payment_max and program.payment_max != program.payment_min %} - ${{ "${:,.0f}".format(program.payment_max) }}{% endif %}</span>
+                {% endif %}
+                {% if program.eligibility_parsed %}
+                    <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
+                        {% if program.eligibility_parsed.is_loan %}<span class="badge badge-medium" style="font-size: 0.75rem;">Loan</span>{% endif %}
+                        {% if program.eligibility_parsed.is_payment %}<span class="badge badge-medium" style="font-size: 0.75rem;">Payment</span>{% endif %}
+                        {% if program.eligibility_parsed.crop_farming %}<span class="badge badge-medium" style="font-size: 0.75rem;">Crops</span>{% endif %}
+                        {% if program.eligibility_parsed.livestock %}<span class="badge badge-medium" style="font-size: 0.75rem;">Livestock</span>{% endif %}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div style="text-align: center; margin-top: 2rem;">
+    <a href="/programs" class="btn">Browse All Programs</a>
+</div>
+{% endblock %}

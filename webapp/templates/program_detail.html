@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}{{ program.program_name }} - FSA Program Explorer{% endblock %}
+
+{% block content %}
+<a href="/programs" style="color: #2c5530; text-decoration: none; margin-bottom: 1rem; display: inline-block;">← Back to Programs</a>
+
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1.5rem;">
+        <h2 style="color: #2c5530;">{{ program.program_name }}</h2>
+        <span class="badge {% if program.confidence_score >= 0.7 %}badge-high{% elif program.confidence_score >= 0.5 %}badge-medium{% else %}badge-low{% endif %}">
+            Confidence: {{ "%.2f"|format(program.confidence_score) }}
+        </span>
+    </div>
+
+    {% if program.program_code %}
+    <div style="margin-bottom: 1rem;">
+        <strong>Program Code:</strong> {{ program.program_code }}
+    </div>
+    {% endif %}
+
+    {% if program.description %}
+    <div style="margin-bottom: 2rem;">
+        <h3 style="margin-bottom: 0.75rem;">Description</h3>
+        <p style="line-height: 1.8;">{{ program.description }}</p>
+    </div>
+    {% endif %}
+
+    {% if program.payment_min or program.payment_info_raw %}
+    <div style="margin-bottom: 2rem;">
+        <h3 style="margin-bottom: 0.75rem;">Payment Information</h3>
+
+        {% if program.payment_min %}
+        <div style="background: #f9f9f9; padding: 1rem; border-radius: 4px; margin-bottom: 1rem;">
+            <div style="font-size: 1.5rem; font-weight: bold; color: #2c5530;">
+                ${{ "${:,.2f}".format(program.payment_min) }}
+                {% if program.payment_max and program.payment_max != program.payment_min %}
+                 - ${{ "${:,.2f}".format(program.payment_max) }}
+                {% endif %}
+            </div>
+            {% if program.payment_unit %}
+            <div style="color: #666; margin-top: 0.25rem;">{{ program.payment_unit }}</div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if program.payment_info_raw %}
+        <p style="background: #fffbea; padding: 1rem; border-left: 3px solid #f0ad4e; border-radius: 4px;">
+            {{ program.payment_info_raw }}
+        </p>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% if program.eligibility_raw %}
+    {% set elig = program.eligibility_raw | format_eligibility %}
+    <div style="margin-bottom: 2rem;">
+        <h3 style="margin-bottom: 1rem;">Eligibility Requirements</h3>
+
+        {% if elig.intro %}
+        <div style="background: #f0f7f1; padding: 1.25rem; border-radius: 4px; border-left: 4px solid #2c5530; margin-bottom: 1.5rem;">
+            <p style="line-height: 1.8; color: #333;">{{ elig.intro }}</p>
+        </div>
+        {% endif %}
+
+        {% if elig.commodities %}
+        <div style="margin-bottom: 1.5rem;">
+            <h4 style="color: #2c5530; margin-bottom: 0.75rem;">Eligible Commodities</h4>
+            <div style="background: white; padding: 1rem; border: 1px solid #e0e0e0; border-radius: 4px;">
+                <ul style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem; list-style: none; padding: 0; margin: 0;">
+                    {% for commodity in elig.commodities %}
+                    <li style="padding: 0.5rem; background: #f9f9f9; border-radius: 4px; display: flex; align-items: center;">
+                        <span style="color: #2c5530; margin-right: 0.5rem;">•</span>
+                        {{ commodity }}
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if elig.requirements %}
+        <div style="margin-bottom: 1.5rem;">
+            <h4 style="color: #2c5530; margin-bottom: 0.75rem;">Who Can Apply</h4>
+            <div style="background: #fffbea; padding: 1.25rem; border-radius: 4px; border-left: 4px solid #f0ad4e;">
+                {% for req in elig.requirements %}
+                <p style="line-height: 1.8; color: #333; margin-bottom: {% if not loop.last %}1rem{% else %}0{% endif %};">{{ req }}</p>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if not elig.intro and not elig.commodities and not elig.requirements %}
+        <div style="background: #f9f9f9; padding: 1rem; border-radius: 4px;">
+            <p style="line-height: 1.8; color: #666;">{{ program.eligibility_raw }}</p>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #eee;">
+        <a href="{{ program.source_url }}" target="_blank" class="btn">View Official Page →</a>
+    </div>
+</div>
+
+<div class="card">
+    <h3 style="margin-bottom: 1rem;">Data Details</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+        <tr style="border-bottom: 1px solid #eee;">
+            <td style="padding: 0.75rem 0; width: 30%;"><strong>Source URL:</strong></td>
+            <td style="padding: 0.75rem 0;"><a href="{{ program.source_url }}" target="_blank" style="color: #2c5530; word-break: break-all;">{{ program.source_url }}</a></td>
+        </tr>
+        <tr style="border-bottom: 1px solid #eee;">
+            <td style="padding: 0.75rem 0;"><strong>Last Updated:</strong></td>
+            <td style="padding: 0.75rem 0;">{{ program.last_updated.strftime('%Y-%m-%d %H:%M') if program.last_updated else 'N/A' }}</td>
+        </tr>
+        <tr>
+            <td style="padding: 0.75rem 0;"><strong>Database ID:</strong></td>
+            <td style="padding: 0.75rem 0;">{{ program.id }}</td>
+        </tr>
+    </table>
+</div>
+{% endblock %}

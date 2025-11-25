@@ -1,0 +1,450 @@
+#!/usr/bin/env python3
+"""
+FSA Program Explorer - Web Interface
+Browse and search farm programs from the database
+"""
+import sys
+from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from flask import Flask, render_template, request, jsonify
+from src.database.connection import db
+import logging
+import re
+
+app = Flask(__name__)
+app.config['JSON_SORT_KEYS'] = False
+
+# Initialize database connection
+db.connect()
+
+logger = logging.getLogger(__name__)
+
+
+def format_eligibility_text(eligibility_raw: str) -> dict:
+    """
+    Format raw eligibility text into structured, readable sections
+
+    Returns:
+        dict with 'intro', 'commodities', 'requirements', and 'formatted_html'
+    """
+    if not eligibility_raw:
+        return {'intro': None, 'commodities': [], 'requirements': [], 'formatted_html': None}
+
+    # Split by pipe separator and remove duplicates
+    sections = eligibility_raw.split('|')
+    unique_sections = []
+    seen = set()
+
+    for section in sections:
+        section = section.strip()
+        if section and section not in seen:
+            unique_sections.append(section)
+            seen.add(section)
+
+    intro = None
+    commodities = []
+    requirements = []
+
+    for section in unique_sections:
+        # Check if this is a commodity list (contains multiple capital words stuck together)
+        if 'include:' in section.lower() and re.search(r'[A-Z][a-z]+[A-Z][a-z]+', section):
+            # Extract the list part
+            parts = section.split('include:', 1)
+            if len(parts) == 2:
+                intro = parts[0].strip()
+                commodity_text = parts[1].strip()
+
+                # Split camelCase/PascalCase commodities
+                # Handle multi-word items like "Dry peas", "Grain sorghum", etc.
+                # First, add markers before capital letters (but not after spaces or opening parens)
+                spaced = re.sub(r'([a-z\)])([A-Z])', r'\1||\2', commodity_text)
+                # Split on the marker and clean up
+                items = [item.strip() for item in spaced.split('||') if item.strip()]
+                commodities = items
+
+        # Check if this is a "Who Is Eligible" section
+        elif 'who is eligible' in section.lower() or 'eligible applicants' in section.lower():
+            # Extract just the requirements part
+            text = re.sub(r'^.*?(?:Who Is Eligible|Eligible applicants)', '', section, flags=re.I).strip()
+            if text and text not in requirements:
+                requirements.append(text)
+
+        # Otherwise it's an intro paragraph
+        elif not intro and len(section) > 100 and 'include:' not in section.lower():
+            # Take the part before "Eligible commodities" if present
+            if 'eligible commodities' in section.lower():
+                intro = section.split('Eligible commodities')[0].strip()
+            else:
+                intro = section
+
+    return {
+        'intro': intro,
+        'commodities': commodities,
+        'requirements': requirements
+    }
+
+
+# Register the filter for use in templates
+app.jinja_env.filters['format_eligibility'] = format_eligibility_text
+
+
+@app.route('/')
+def index():
+    """Home page with program statistics"""
+
+    # Get summary stats (only actual programs, not rules/reports/etc)
+    stats = {
+        'total_programs': db.fetch_one("SELECT COUNT(*) as count FROM programs WHERE content_type = 'program'")['count'],
+        'high_quality': db.fetch_one("SELECT COUNT(*) as count FROM programs WHERE content_type = 'program' AND confidence_score >= 0.7")['count'],
+        'with_payment_info': db.fetch_one("SELECT COUNT(*) as count FROM programs WHERE content_type = 'program' AND payment_min IS NOT NULL")['count'],
+        'with_eligibility': db.fetch_one("SELECT COUNT(*) as count FROM programs WHERE content_type = 'program' AND eligibility_raw IS NOT NULL")['count'],
+    }
+
+    # Get category breakdown (only actual programs)
+    categories = db.fetch_all("""
+        SELECT
+          CASE
+            WHEN program_name LIKE '%Loan%' THEN 'Loan Programs'
+            WHEN program_name LIKE '%Conservation%' OR program_name LIKE '%CRP%' THEN 'Conservation'
+            WHEN program_name LIKE '%Emergency%' OR program_name LIKE '%Disaster%' THEN 'Disaster/Emergency'
+            WHEN program_name LIKE '%Marketing%' OR program_name LIKE '%Commodity%' THEN 'Marketing/Commodity'
+            WHEN program_name LIKE '%Payment%' OR program_name LIKE '%Eligibility%' THEN 'Payment/Eligibility'
+            ELSE 'Other'
+          END as category,
+          COUNT(*) as count
+        FROM programs
+        WHERE content_type = 'program' AND confidence_score >= 0.5
+        GROUP BY category
+        ORDER BY count DESC
+    """)
+
+    # Get featured high-quality programs
+    featured_programs = db.fetch_all("""
+        SELECT
+          id,
+          program_name,
+          SUBSTRING(description FROM 1 FOR 150) as description_short,
+          confidence_score,
+          payment_min,
+          payment_max,
+          eligibility_parsed
+        FROM programs
+        WHERE confidence_score >= 0.8
+          AND eligibility_parsed IS NOT NULL
+          AND payment_min IS NOT NULL
+        ORDER BY confidence_score DESC, program_name
+        LIMIT 6
+    """)
+
+    return render_template('index.html', stats=stats, categories=categories, featured_programs=featured_programs)
+
+
+@app.route('/programs')
+def programs():
+    """Program listing with filters"""
+
+    # Get filter parameters
+    category = request.args.get('category', '')
+    min_confidence = float(request.args.get('min_confidence', 0.5))
+    has_payment = request.args.get('has_payment', '')
+    search = request.args.get('search', '')
+
+    # Build query
+    query = """
+        SELECT
+          id,
+          program_name,
+          SUBSTRING(description FROM 1 FOR 200) as description_short,
+          confidence_score,
+          payment_min,
+          payment_max,
+          payment_unit,
+          CASE WHEN eligibility_raw IS NOT NULL THEN true ELSE false END as has_eligibility,
+          source_url
+        FROM programs
+        WHERE confidence_score >= %s
+    """
+    params = [min_confidence]
+
+    # Add filters
+    if category and category != 'all':
+        if category == 'Loan Programs':
+            query += " AND program_name LIKE %s"
+            params.append('%Loan%')
+        elif category == 'Conservation':
+            query += " AND (program_name LIKE %s OR program_name LIKE %s)"
+            params.extend(['%Conservation%', '%CRP%'])
+        elif category == 'Disaster/Emergency':
+            query += " AND (program_name LIKE %s OR program_name LIKE %s)"
+            params.extend(['%Emergency%', '%Disaster%'])
+
+    if has_payment == 'yes':
+        query += " AND payment_min IS NOT NULL"
+
+    if search:
+        query += " AND (program_name ILIKE %s OR description ILIKE %s)"
+        search_term = f'%{search}%'
+        params.extend([search_term, search_term])
+
+    query += " ORDER BY confidence_score DESC, program_name LIMIT 100"
+
+    programs = db.fetch_all(query, tuple(params))
+
+    return render_template('programs.html',
+                         programs=programs,
+                         category=category,
+                         min_confidence=min_confidence,
+                         has_payment=has_payment,
+                         search=search)
+
+
+@app.route('/program/<int:program_id>')
+def program_detail(program_id):
+    """Program detail page"""
+
+    program = db.fetch_one("""
+        SELECT *
+        FROM programs
+        WHERE id = %s
+    """, (program_id,))
+
+    if not program:
+        return "Program not found", 404
+
+    return render_template('program_detail.html', program=program)
+
+
+@app.route('/api/stats')
+def api_stats():
+    """API endpoint for statistics"""
+
+    # Category distribution
+    categories = db.fetch_all("""
+        SELECT
+          CASE
+            WHEN program_name LIKE '%Loan%' THEN 'Loan Programs'
+            WHEN program_name LIKE '%Conservation%' OR program_name LIKE '%CRP%' THEN 'Conservation'
+            WHEN program_name LIKE '%Emergency%' OR program_name LIKE '%Disaster%' THEN 'Disaster/Emergency'
+            WHEN program_name LIKE '%Marketing%' OR program_name LIKE '%Commodity%' THEN 'Marketing/Commodity'
+            ELSE 'Other'
+          END as category,
+          COUNT(*) as count,
+          AVG(confidence_score) as avg_confidence
+        FROM programs
+        WHERE confidence_score >= 0.5
+        GROUP BY category
+        ORDER BY count DESC
+    """)
+
+    # Confidence distribution
+    confidence_dist = db.fetch_all("""
+        SELECT
+          CASE
+            WHEN confidence_score >= 0.9 THEN '0.9-1.0'
+            WHEN confidence_score >= 0.7 THEN '0.7-0.9'
+            WHEN confidence_score >= 0.5 THEN '0.5-0.7'
+            ELSE '0.0-0.5'
+          END as range,
+          COUNT(*) as count
+        FROM programs
+        GROUP BY range
+        ORDER BY MIN(confidence_score) DESC
+    """)
+
+    return jsonify({
+        'categories': categories,
+        'confidence_distribution': confidence_dist
+    })
+
+
+@app.route('/search')
+def search():
+    """Search endpoint"""
+    query = request.args.get('q', '')
+
+    if not query:
+        return jsonify([])
+
+    results = db.fetch_all("""
+        SELECT
+          id,
+          program_name,
+          SUBSTRING(description FROM 1 FOR 150) as description_short,
+          confidence_score
+        FROM programs
+        WHERE program_name ILIKE %s
+           OR description ILIKE %s
+        ORDER BY confidence_score DESC
+        LIMIT 20
+    """, (f'%{query}%', f'%{query}%'))
+
+    return jsonify(results)
+
+
+@app.route('/finder')
+def finder():
+    """Program Finder - Match programs to farmer's situation"""
+
+    # Get farmer's inputs from query params
+    farm_type = request.args.getlist('farm_type')
+    farmer_status = request.args.getlist('farmer_status')
+    program_type = request.args.getlist('program_type')
+    situation = request.args.getlist('situation')
+
+    # Build matching criteria if form submitted
+    matched_programs = []
+    if any([farm_type, farmer_status, program_type, situation]):
+        # Build WHERE clause for matching (use OR within categories, AND between categories)
+        conditions = ["confidence_score >= 0.5", "eligibility_parsed IS NOT NULL"]
+
+        # Farm Type matching (OR within this category)
+        farm_type_conditions = []
+        if 'crops' in farm_type:
+            farm_type_conditions.append("(eligibility_parsed->>'crop_farming')::boolean = true")
+        if 'livestock' in farm_type:
+            farm_type_conditions.append("(eligibility_parsed->>'livestock')::boolean = true")
+        if 'dairy' in farm_type:
+            farm_type_conditions.append("(eligibility_parsed->>'dairy')::boolean = true")
+        if 'organic' in farm_type:
+            farm_type_conditions.append("(eligibility_parsed->>'organic')::boolean = true")
+        if farm_type_conditions:
+            conditions.append("(" + " OR ".join(farm_type_conditions) + ")")
+
+        # Farmer Status matching (OPTIONAL - used for ranking, not filtering)
+        # Most programs don't explicitly mention farmer status in eligibility
+        # So we don't filter by this - instead we'll boost ranking later
+        farmer_status_conditions = []
+        if 'beginning' in farmer_status:
+            farmer_status_conditions.append("(eligibility_parsed->>'beginning_farmer')::boolean = true")
+        if 'young' in farmer_status:
+            farmer_status_conditions.append("(eligibility_parsed->>'young_farmer')::boolean = true")
+        if 'veteran' in farmer_status:
+            farmer_status_conditions.append("(eligibility_parsed->>'veteran')::boolean = true")
+        # NOTE: Not adding to conditions - farmer status is informational only
+
+        # Program Type matching (OR within this category)
+        program_type_conditions = []
+        if 'loans' in program_type:
+            program_type_conditions.append("(eligibility_parsed->>'is_loan')::boolean = true")
+        if 'payments' in program_type:
+            program_type_conditions.append("(eligibility_parsed->>'is_payment')::boolean = true")
+        if 'insurance' in program_type:
+            program_type_conditions.append("(eligibility_parsed->>'is_insurance')::boolean = true")
+        if 'conservation' in program_type:
+            program_type_conditions.append("(eligibility_parsed->>'is_conservation')::boolean = true")
+        if program_type_conditions:
+            conditions.append("(" + " OR ".join(program_type_conditions) + ")")
+
+        # Situation matching (OPTIONAL - used for ranking, not filtering)
+        # Many general programs can help with these situations even if not specifically designed for them
+        situation_conditions = []
+        if 'disaster' in situation:
+            situation_conditions.append("(eligibility_parsed->>'is_disaster')::boolean = true")
+        if 'price_loss' in situation:
+            situation_conditions.append("(eligibility_parsed->>'for_price_loss')::boolean = true")
+        if 'need_equipment' in situation:
+            situation_conditions.append("(eligibility_parsed->>'for_equipment')::boolean = true")
+        if 'buy_land' in situation:
+            situation_conditions.append("(eligibility_parsed->>'for_land_purchase')::boolean = true")
+        # NOTE: Not adding to conditions - situation is informational only
+
+        # Execute query (AND between categories)
+        where_clause = " AND ".join(conditions)
+        query = f"""
+            SELECT
+              id,
+              program_name,
+              SUBSTRING(description FROM 1 FOR 200) as description_short,
+              confidence_score,
+              payment_min,
+              payment_max,
+              payment_unit,
+              source_url,
+              eligibility_parsed
+            FROM programs
+            WHERE {where_clause}
+            ORDER BY confidence_score DESC, program_name
+            LIMIT 50
+        """
+
+        matched_programs = db.fetch_all(query)
+
+        # Calculate match scores for each program
+        for program in matched_programs:
+            criteria = program.get('eligibility_parsed', {})
+            match_count = 0
+            # Don't count farmer_status or situation in total since they're optional
+            total_criteria = len(farm_type) + len(program_type)
+            # But we'll add bonus points for farmer status and situation matches
+
+            # Count how many selected criteria match
+            if 'crops' in farm_type and criteria.get('crop_farming'):
+                match_count += 1
+            if 'livestock' in farm_type and criteria.get('livestock'):
+                match_count += 1
+            if 'dairy' in farm_type and criteria.get('dairy'):
+                match_count += 1
+            if 'organic' in farm_type and criteria.get('organic'):
+                match_count += 1
+            if 'beginning' in farmer_status and criteria.get('beginning_farmer'):
+                match_count += 1
+            if 'young' in farmer_status and criteria.get('young_farmer'):
+                match_count += 1
+            if 'veteran' in farmer_status and criteria.get('veteran'):
+                match_count += 1
+            if 'loans' in program_type and criteria.get('is_loan'):
+                match_count += 1
+            if 'payments' in program_type and criteria.get('is_payment'):
+                match_count += 1
+            if 'insurance' in program_type and criteria.get('is_insurance'):
+                match_count += 1
+            if 'conservation' in program_type and criteria.get('is_conservation'):
+                match_count += 1
+            if 'disaster' in situation and criteria.get('is_disaster'):
+                match_count += 1
+            if 'price_loss' in situation and criteria.get('for_price_loss'):
+                match_count += 1
+            if 'need_equipment' in situation and criteria.get('for_equipment'):
+                match_count += 1
+            if 'buy_land' in situation and criteria.get('for_land_purchase'):
+                match_count += 1
+
+            # Calculate base match score from required criteria
+            base_score = round((match_count / total_criteria * 100) if total_criteria > 0 else 0)
+
+            # Add bonus points for farmer status and situation matches (up to +25%)
+            bonus_points = 0
+            if 'beginning' in farmer_status and criteria.get('beginning_farmer'):
+                bonus_points += 5
+            if 'young' in farmer_status and criteria.get('young_farmer'):
+                bonus_points += 5
+            if 'veteran' in farmer_status and criteria.get('veteran'):
+                bonus_points += 5
+            if 'disaster' in situation and criteria.get('is_disaster'):
+                bonus_points += 5
+            if 'price_loss' in situation and criteria.get('for_price_loss'):
+                bonus_points += 5
+            if 'need_equipment' in situation and criteria.get('for_equipment'):
+                bonus_points += 5
+            if 'buy_land' in situation and criteria.get('for_land_purchase'):
+                bonus_points += 5
+
+            program['match_score'] = min(100, base_score + bonus_points)
+            program['has_bonus_match'] = bonus_points > 0
+
+        # Sort by match score
+        matched_programs.sort(key=lambda x: x['match_score'], reverse=True)
+
+    return render_template('finder.html',
+                         matched_programs=matched_programs,
+                         farm_type=farm_type,
+                         farmer_status=farmer_status,
+                         program_type=program_type,
+                         situation=situation)
+
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5001)

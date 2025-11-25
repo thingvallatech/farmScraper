@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: farm_scraper_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-farm_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-farm_password}
+      POSTGRES_DB: ${POSTGRES_DB:-farm_scraper}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/database/init_db.sql:/docker-entrypoint-initdb.d/init_db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-farm_user}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - farm_network
+
+  # Optional: pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: farm_scraper_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@farmassist.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    depends_on:
+      - postgres
+    networks:
+      - farm_network
+    profiles:
+      - dev  # Only starts with: docker-compose --profile dev up
+
+volumes:
+  postgres_data:
+
+networks:
+  farm_network:
+    driver: bridge

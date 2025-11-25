@@ -1,0 +1,35 @@
+# Lightweight Dockerfile for Flask Web App Only
+FROM python:3.11-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -u 1000 appuser
+
+WORKDIR /app
+
+# Copy only web app dependencies
+COPY requirements.txt .
+
+# Install Python dependencies + gunicorn
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir gunicorn psycopg2-binary
+
+# Copy application code
+COPY --chown=appuser:appuser . .
+
+USER appuser
+
+# Use PORT environment variable from Digital Ocean
+ENV PORT=8080
+EXPOSE 8080
+
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8080/health', timeout=5).raise_for_status()"
+
+# Production server with gunicorn
+CMD gunicorn --bind 0.0.0.0:${PORT} --workers 2 --timeout 120 webapp.app:app
