@@ -1,0 +1,14 @@
+# Web Framework
+flask==3.0.0
+
+# Database
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.25
+
+# Utilities
+python-dotenv==1.0.1
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Logging
+loguru==0.7.2
