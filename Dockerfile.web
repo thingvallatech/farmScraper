@@ -1,4 +1,5 @@
 # Lightweight Dockerfile for Flask Web App Only
+# Force rebuild: 2025-11-26
 FROM python:3.11-slim
 
 # Install runtime dependencies
