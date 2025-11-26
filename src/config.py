@@ -3,9 +3,10 @@ Configuration management for Farm Assist scraper
 Loads settings from environment variables with validation
 """
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, validator
+import os
 
 
 class Settings(BaseSettings):
@@ -24,6 +25,24 @@ class Settings(BaseSettings):
     postgres_db: str = Field(default="farm_scraper")
     postgres_host: str = Field(default="localhost")
     postgres_port: int = Field(default=5432)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # Parse DATABASE_URL if present (for Digital Ocean, Heroku, etc.)
+        database_url = os.getenv('DATABASE_URL')
+        if database_url:
+            try:
+                # Parse postgresql://user:password@host:port/database
+                from urllib.parse import urlparse
+                result = urlparse(database_url)
+                self.postgres_user = result.username or self.postgres_user
+                self.postgres_password = result.password or self.postgres_password
+                self.postgres_host = result.hostname or self.postgres_host
+                self.postgres_port = result.port or self.postgres_port
+                self.postgres_db = result.path.lstrip('/') or self.postgres_db
+            except Exception as e:
+                # If parsing fails, use defaults
+                print(f"Warning: Could not parse DATABASE_URL: {e}")
 
     # API Keys
     nass_api_key: str = Field(default="")
