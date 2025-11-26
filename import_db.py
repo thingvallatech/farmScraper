@@ -24,14 +24,16 @@ def import_sql_file(sql_file_path):
 
     try:
         for i, statement in enumerate(statements):
-            if statement:
+            # Skip empty statements and comments
+            if statement and not statement.startswith('--') and statement.strip():
                 try:
                     db.execute(statement)
                     if (i + 1) % 100 == 0:
                         print(f"Executed {i + 1}/{len(statements)} statements...")
                 except Exception as e:
                     print(f"Error on statement {i + 1}: {e}")
-                    if "already exists" not in str(e).lower():
+                    # Skip certain expected errors
+                    if "already exists" not in str(e).lower() and "can't execute an empty query" not in str(e).lower():
                         raise
 
         print("Database import completed successfully!")
