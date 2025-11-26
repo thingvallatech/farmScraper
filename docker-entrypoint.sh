@@ -78,6 +78,12 @@ finally:
 
 echo "Found $PROGRAM_COUNT programs in database"
 
+# Use default SQL dump URL if not set
+if [ -z "$SQL_DUMP_URL" ]; then
+    SQL_DUMP_URL="https://github.com/thingvallatech/farmScraper/releases/download/v1.0.0-db-seed/farm_scraper_dump.sql"
+    echo "Using default SQL_DUMP_URL: $SQL_DUMP_URL"
+fi
+
 # If database is empty and SQL_DUMP_URL is provided, import data
 if [ "$PROGRAM_COUNT" -eq "0" ] && [ -n "$SQL_DUMP_URL" ]; then
     echo "=== Database is empty - importing data from $SQL_DUMP_URL ==="
