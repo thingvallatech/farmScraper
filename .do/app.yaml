@@ -26,6 +26,24 @@ services:
     instance_size_slug: basic-xxs
     routes:
       - path: /
+jobs:
+  - name: import-database
+    kind: POST_DEPLOY
+    dockerfile_path: Dockerfile.web
+    github:
+      repo: thingvallatech/farmScraper
+      branch: main
+      deploy_on_push: false
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
+      - key: SQL_DUMP_URL
+        scope: RUN_TIME
+        value: https://github.com/thingvallatech/farmScraper/releases/download/v1.0.0-db-seed/farm_scraper_dump.sql
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    run_command: python3 manual_import.py
 databases:
   - engine: PG
     name: db
