@@ -4,6 +4,7 @@ FROM python:3.11-slim
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     libpq5 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
@@ -18,6 +19,10 @@ COPY requirements-web.txt .
 RUN pip install --no-cache-dir -r requirements-web.txt && \
     pip install --no-cache-dir gunicorn
 
+# Copy entrypoint script and make it executable
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Copy application code
 COPY --chown=appuser:appuser . .
 
@@ -27,5 +32,6 @@ USER appuser
 ENV PORT=8080
 EXPOSE 8080
 
-# Production server with gunicorn
-CMD gunicorn --bind 0.0.0.0:${PORT} --workers 2 --timeout 120 webapp.app:app
+# Set entrypoint and default command
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "120", "webapp.app:app"]
