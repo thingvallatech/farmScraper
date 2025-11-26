@@ -111,63 +111,12 @@ set -e
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Found $PROGRAM_COUNT programs in database"
 
-# Use default SQL dump URL if not set
-if [ -z "$SQL_DUMP_URL" ]; then
-    SQL_DUMP_URL="https://github.com/thingvallatech/farmScraper/releases/download/v1.0.0-db-seed/farm_scraper_dump.sql"
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - Using default SQL_DUMP_URL: $SQL_DUMP_URL"
-fi
-
-# If database is empty and SQL_DUMP_URL is provided, import data
-if [ "$PROGRAM_COUNT" -eq "0" ] && [ -n "$SQL_DUMP_URL" ]; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - ==================================="
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - Database is empty - importing data"
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - ==================================="
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - SQL Dump URL: $SQL_DUMP_URL"
-
-    # Download SQL dump
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - Downloading SQL dump..."
-
-    set +e
-    curl -L -f -o /tmp/farm_scraper_dump.sql "$SQL_DUMP_URL"
-    CURL_EXIT=$?
-    set -e
-
-    if [ $CURL_EXIT -ne 0 ]; then
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: curl failed with exit code $CURL_EXIT"
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - Failed to download SQL dump from $SQL_DUMP_URL"
-        exit 1
-    fi
-
-    if [ -f /tmp/farm_scraper_dump.sql ]; then
-        FILE_SIZE=$(du -h /tmp/farm_scraper_dump.sql | cut -f1)
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - SQL dump downloaded successfully ($FILE_SIZE)"
-
-        # Import using the import_db.py script
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting database import..."
-
-        set +e
-        python3 import_db.py
-        IMPORT_EXIT=$?
-        set -e
-
-        if [ $IMPORT_EXIT -ne 0 ]; then
-            echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: Database import failed with exit code $IMPORT_EXIT"
-            rm -f /tmp/farm_scraper_dump.sql
-            exit 1
-        fi
-
-        # Clean up
-        rm -f /tmp/farm_scraper_dump.sql
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - Database import completed successfully!"
-    else
-        echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: SQL dump file not found after download"
-        exit 1
-    fi
-elif [ "$PROGRAM_COUNT" -eq "0" ]; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - WARNING: Database is empty but SQL_DUMP_URL is not set. Skipping import."
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - To enable automatic import, set the SQL_DUMP_URL environment variable."
+# Log database status - import will happen in Flask app
+if [ "$PROGRAM_COUNT" -eq "0" ]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Database is empty ($PROGRAM_COUNT programs)"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Import will be triggered by Flask app on first request"
 else
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - Database already has $PROGRAM_COUNT programs. Skipping import."
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Database already has $PROGRAM_COUNT programs"
 fi
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') - ==================================="
