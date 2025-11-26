@@ -6,7 +6,8 @@ This should be run once after deployment, then can be deleted.
 import os
 import sys
 import requests
-import psycopg2
+import subprocess
+import tempfile
 from urllib.parse import urlparse
 
 def main():
@@ -22,41 +23,61 @@ def main():
     response = requests.get(sql_dump_url, timeout=300)
     response.raise_for_status()
     sql_content = response.text
-    print(f'Downloaded {len(sql_content)} bytes')
+    print(f'Downloaded {len(sql_content)} bytes ({len(sql_content)/1024/1024:.1f} MB)')
 
-    # Parse database URL
-    result = urlparse(database_url)
+    # Write SQL content to temporary file
+    print('Writing SQL dump to temporary file...')
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.sql', delete=False) as f:
+        temp_file = f.name
+        f.write(sql_content)
 
-    print('Connecting to database...')
-    conn = psycopg2.connect(
-        host=result.hostname,
-        port=result.port or 5432,
-        user=result.username,
-        password=result.password,
-        database=result.path.lstrip('/'),
-        sslmode='require' if 'sslmode=require' in database_url else 'prefer'
-    )
+    print(f'Importing SQL dump using psql...')
+    try:
+        # Use psql to import the dump - it properly handles COPY statements
+        env = os.environ.copy()
+        env['PGPASSWORD'] = urlparse(database_url).password
 
-    print('Importing SQL dump...')
-    cursor = conn.cursor()
+        result = urlparse(database_url)
+        cmd = [
+            'psql',
+            '-h', result.hostname,
+            '-p', str(result.port or 5432),
+            '-U', result.username,
+            '-d', result.path.lstrip('/'),
+            '-f', temp_file,
+            '--set', 'ON_ERROR_STOP=off'  # Continue on errors
+        ]
 
-    # Split SQL into statements and execute
-    statements = [s.strip() for s in sql_content.split(';') if s.strip()]
-    total = len(statements)
+        # Add sslmode if required
+        if 'sslmode=require' in database_url:
+            env['PGSSLMODE'] = 'require'
 
-    for i, statement in enumerate(statements, 1):
-        if i % 100 == 0:
-            print(f'Progress: {i}/{total} statements ({i*100//total}%)')
-        try:
-            cursor.execute(statement)
-        except Exception as e:
-            print(f'Warning: Error executing statement {i}: {e}')
+        print(f'Running: psql -h {result.hostname} -U {result.username} -d {result.path.lstrip("/")} -f {temp_file}')
 
-    conn.commit()
-    cursor.close()
-    conn.close()
+        process = subprocess.Popen(
+            cmd,
+            env=env,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True
+        )
 
-    print(f'Successfully imported {total} SQL statements')
+        # Stream output in real-time
+        for line in process.stdout:
+            print(line.rstrip())
+
+        process.wait()
+
+        if process.returncode != 0:
+            print(f'Warning: psql exited with code {process.returncode}')
+        else:
+            print('Successfully imported SQL dump')
+
+    finally:
+        # Clean up temp file
+        if os.path.exists(temp_file):
+            os.unlink(temp_file)
+            print(f'Cleaned up temporary file')
 
 if __name__ == '__main__':
     main()
