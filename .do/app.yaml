@@ -16,7 +16,7 @@ services:
         value: https://github.com/thingvallatech/farmScraper/releases/download/v1.0.0-db-seed/farm_scraper_dump.sql
     health_check:
       http_path: /health
-      initial_delay_seconds: 30
+      initial_delay_seconds: 300
       period_seconds: 10
       timeout_seconds: 5
       success_threshold: 1
