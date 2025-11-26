@@ -2,27 +2,38 @@
 set -e
 
 echo "=== FSA Program Explorer Startup ==="
+echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting entrypoint script"
 
 # Wait for database to be ready
-echo "Waiting for database to be ready..."
+echo "$(date '+%Y-%m-%d %H:%M:%S') - Waiting for database to be ready..."
+
+# Disable exit on error for database check
+set +e
 python3 -c "
 import time
 import os
+import sys
 import psycopg2
 from urllib.parse import urlparse
+
+print('Checking DATABASE_URL environment variable...')
+database_url = os.getenv('DATABASE_URL')
+if not database_url:
+    print('ERROR: DATABASE_URL not set')
+    sys.exit(1)
+
+print('DATABASE_URL is set, parsing connection details...')
+result = urlparse(database_url)
+print(f'Database host: {result.hostname}')
+print(f'Database port: {result.port or 5432}')
+print(f'Database name: {result.path.lstrip(\"/\")}')
 
 max_retries = 30
 retry_count = 0
 
-database_url = os.getenv('DATABASE_URL')
-if not database_url:
-    print('ERROR: DATABASE_URL not set')
-    exit(1)
-
-result = urlparse(database_url)
-
 while retry_count < max_retries:
     try:
+        print(f'Attempting to connect (attempt {retry_count + 1}/{max_retries})...')
         conn = psycopg2.connect(
             host=result.hostname,
             port=result.port or 5432,
@@ -33,85 +44,134 @@ while retry_count < max_retries:
         )
         conn.close()
         print('Database is ready!')
-        break
+        sys.exit(0)
     except Exception as e:
         retry_count += 1
         if retry_count < max_retries:
-            print(f'Database not ready yet (attempt {retry_count}/{max_retries}), waiting...')
+            print(f'Database not ready yet (attempt {retry_count}/{max_retries}): {e}')
             time.sleep(2)
         else:
             print(f'ERROR: Could not connect to database after {max_retries} attempts: {e}')
-            exit(1)
+            sys.exit(1)
 "
+DB_CHECK_EXIT=$?
+set -e
+
+if [ $DB_CHECK_EXIT -ne 0 ]; then
+    echo "ERROR: Database check failed with exit code $DB_CHECK_EXIT"
+    exit $DB_CHECK_EXIT
+fi
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') - Database connection successful"
 
 # Check if database needs to be initialized
-echo "Checking if database has data..."
+echo "$(date '+%Y-%m-%d %H:%M:%S') - Checking if database has data..."
+
+set +e
 PROGRAM_COUNT=$(python3 -c "
 import os
+import sys
 import psycopg2
 from urllib.parse import urlparse
 
+print('Connecting to database to check program count...')
 database_url = os.getenv('DATABASE_URL')
 result = urlparse(database_url)
 
-conn = psycopg2.connect(
-    host=result.hostname,
-    port=result.port or 5432,
-    user=result.username,
-    password=result.password,
-    database=result.path.lstrip('/'),
-    sslmode='require' if 'sslmode=require' in database_url else 'prefer'
-)
-
-cursor = conn.cursor()
 try:
-    cursor.execute(\"SELECT COUNT(*) FROM programs WHERE content_type = 'program'\")
-    count = cursor.fetchone()[0]
-    print(count)
-except Exception:
-    # Table doesn't exist yet
-    print(0)
-finally:
-    cursor.close()
-    conn.close()
-")
+    conn = psycopg2.connect(
+        host=result.hostname,
+        port=result.port or 5432,
+        user=result.username,
+        password=result.password,
+        database=result.path.lstrip('/'),
+        sslmode='require' if 'sslmode=require' in database_url else 'prefer'
+    )
 
-echo "Found $PROGRAM_COUNT programs in database"
+    cursor = conn.cursor()
+    try:
+        print('Querying programs table...')
+        cursor.execute(\"SELECT COUNT(*) FROM programs WHERE content_type = 'program'\")
+        count = cursor.fetchone()[0]
+        print(f'Found {count} programs')
+        print(count)
+    except Exception as e:
+        # Table doesn't exist yet
+        print(f'Programs table does not exist yet: {e}')
+        print(0)
+    finally:
+        cursor.close()
+        conn.close()
+except Exception as e:
+    print(f'ERROR checking program count: {e}')
+    print(0)
+" 2>&1 | tail -1)
+CHECK_EXIT=$?
+set -e
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') - Found $PROGRAM_COUNT programs in database"
 
 # Use default SQL dump URL if not set
 if [ -z "$SQL_DUMP_URL" ]; then
     SQL_DUMP_URL="https://github.com/thingvallatech/farmScraper/releases/download/v1.0.0-db-seed/farm_scraper_dump.sql"
-    echo "Using default SQL_DUMP_URL: $SQL_DUMP_URL"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Using default SQL_DUMP_URL: $SQL_DUMP_URL"
 fi
 
 # If database is empty and SQL_DUMP_URL is provided, import data
 if [ "$PROGRAM_COUNT" -eq "0" ] && [ -n "$SQL_DUMP_URL" ]; then
-    echo "=== Database is empty - importing data from $SQL_DUMP_URL ==="
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ==================================="
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Database is empty - importing data"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - ==================================="
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - SQL Dump URL: $SQL_DUMP_URL"
 
     # Download SQL dump
-    echo "Downloading SQL dump..."
-    curl -L -o /tmp/farm_scraper_dump.sql "$SQL_DUMP_URL"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Downloading SQL dump..."
+
+    set +e
+    curl -L -f -o /tmp/farm_scraper_dump.sql "$SQL_DUMP_URL"
+    CURL_EXIT=$?
+    set -e
+
+    if [ $CURL_EXIT -ne 0 ]; then
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: curl failed with exit code $CURL_EXIT"
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - Failed to download SQL dump from $SQL_DUMP_URL"
+        exit 1
+    fi
 
     if [ -f /tmp/farm_scraper_dump.sql ]; then
-        echo "SQL dump downloaded successfully ($(du -h /tmp/farm_scraper_dump.sql | cut -f1))"
+        FILE_SIZE=$(du -h /tmp/farm_scraper_dump.sql | cut -f1)
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - SQL dump downloaded successfully ($FILE_SIZE)"
 
         # Import using the import_db.py script
-        echo "Importing data..."
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting database import..."
+
+        set +e
         python3 import_db.py
+        IMPORT_EXIT=$?
+        set -e
+
+        if [ $IMPORT_EXIT -ne 0 ]; then
+            echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: Database import failed with exit code $IMPORT_EXIT"
+            rm -f /tmp/farm_scraper_dump.sql
+            exit 1
+        fi
 
         # Clean up
         rm -f /tmp/farm_scraper_dump.sql
-        echo "Database import completed!"
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - Database import completed successfully!"
     else
-        echo "WARNING: Failed to download SQL dump from $SQL_DUMP_URL"
+        echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR: SQL dump file not found after download"
+        exit 1
     fi
 elif [ "$PROGRAM_COUNT" -eq "0" ]; then
-    echo "WARNING: Database is empty but SQL_DUMP_URL is not set. Skipping import."
-    echo "To enable automatic import, set the SQL_DUMP_URL environment variable."
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - WARNING: Database is empty but SQL_DUMP_URL is not set. Skipping import."
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - To enable automatic import, set the SQL_DUMP_URL environment variable."
 else
-    echo "Database already has data. Skipping import."
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Database already has $PROGRAM_COUNT programs. Skipping import."
 fi
 
-echo "=== Starting application ==="
+echo "$(date '+%Y-%m-%d %H:%M:%S') - ==================================="
+echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting application"
+echo "$(date '+%Y-%m-%d %H:%M:%S') - ==================================="
 # Start the application
 exec "$@"
